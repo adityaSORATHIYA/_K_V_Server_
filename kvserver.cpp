@@ -16,51 +16,67 @@ using json = nlohmann::json;
 // Simple Thread-safe LRU Cache
 // =============================
 class LRUCache {
-    size_t capacity_;
-    list<pair<int, string>> cache_;
-    unordered_map<int, list<pair<int, string>>::iterator> index_;
-    mutable mutex mtx_;
+    size_t capacity;
+    list<pair<int, string>> kvcache;
+    unordered_map<int, list<pair<int, string>>::iterator> kvmap;
+    mutable mutex mtx;
 
 public:
-    explicit LRUCache(size_t cap) : capacity_(cap) {}
+    LRUCache(size_t cap) 
+    {
+        capacity = cap;
+    }
 
-    void put(int key, const string& value) {
-        lock_guard<mutex> lock(mtx_);
+    void put(int key, const string& value) 
+    {
+        lock_guard<mutex> lock(mtx);
 
         // Move to front if exists
-        auto it = index_.find(key);
-        if (it != index_.end()) {
-            cache_.erase(it->second);
+        auto it = kvmap.find(key);
+        if (it != kvmap.end()) 
+        {
+            kvcache.erase(it->second);
         }
 
-        cache_.push_front({key, value});
-        index_[key] = cache_.begin();
+        kvcache.push_front({key, value});
+        kvmap[key] = kvcache.begin();
 
         // Remove least recently used
-        if (cache_.size() > capacity_) {
-            auto last = cache_.back();
-            index_.erase(last.first);
-            cache_.pop_back();
+        if (kvcache.size() > capacity) 
+        {
+            auto last = kvcache.back();
+            kvmap.erase(last.first);
+            kvcache.pop_back();
         }
     }
 
-    bool get(int key, string& value) {
-        lock_guard<mutex> lock(mtx_);
-        auto it = index_.find(key);
-        if (it == index_.end()) return false;
+    bool get(int key, string& value) 
+    {
+        lock_guard<mutex> lock(mtx);
+        auto it = kvmap.find(key);
+        if (it == kvmap.end())
+        { 
+            return false;
+        }
 
-        // Move accessed item to front
-        cache_.splice(cache_.begin(), cache_, it->second);
         value = it->second->second;
+
+        // MOVE TO FRONT
+        kvcache.erase(it->second);
+        kvcache.push_front({key, value});
+        kvmap[key] = kvcache.begin();
         return true;
     }
 
     void remove(int key) {
-        lock_guard<mutex> lock(mtx_);
-        auto it = index_.find(key);
-        if (it == index_.end()) return;
-        cache_.erase(it->second);
-        index_.erase(it);
+        lock_guard<mutex> lock(mtx);
+        auto it = kvmap.find(key);
+        if (it == kvmap.end())
+        {
+            return;
+        }
+        kvcache.erase(it->second);
+        kvmap.erase(it);
     }
 };
 
@@ -215,7 +231,7 @@ int main(int argc, char* argv[]) {
             return crow::response(ok ? 200 : 500, ok ? "Deleted" : "Database Error");
         });
 
-    cout << "🚀 Server running on port 8080 with " << threads << " threads.\n";
+    cout << " Server running on port 8080 with " << threads << " threads.\n";
     app.port(8080).concurrency(threads).run();
 
     return 0;
