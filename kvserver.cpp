@@ -12,9 +12,6 @@
 using namespace std;
 using json = nlohmann::json;
 
-// =============================
-// Simple Thread-safe LRU Cache
-// =============================
 class LRUCache {
     size_t capacity;
     list<pair<int, string>> kvcache;
@@ -80,26 +77,18 @@ public:
     }
 };
 
-// =============================
-// Database Configuration
-// =============================
 static const char* DB_HOST = "localhost";
 static const unsigned DB_PORT = 33060;
 static const char* DB_USER = "root";
 static const char* DB_PASS = "Aditya1234";
 static const char* DB_SCHEMA = "kv_db";
 
-// =============================
-// Per-thread MySQL Session
-// =============================
 mysqlx::Session* create_session() {
     try {
         return new mysqlx::Session(DB_HOST, DB_PORT, DB_USER, DB_PASS, DB_SCHEMA);
-    } catch (const mysqlx::Error& err) {
-        cerr << "[DB] Connection error: " << err.what() << endl;
-        return nullptr;
-    } catch (...) {
-        cerr << "[DB] Unknown connection error" << endl;
+    }
+    catch (...) {
+        cerr << "Cannot connect to database\n";
         return nullptr;
     }
 }
@@ -112,9 +101,6 @@ mysqlx::Session* thread_session() {
     return session;
 }
 
-// =============================
-// Database Operations
-// =============================
 bool db_create_or_update(int key, const string& value) {
     mysqlx::Session* s = thread_session();
     if (!s) return false;
@@ -131,10 +117,12 @@ bool db_create_or_update(int key, const string& value) {
             table.insert("k", "v").values(key, value).execute();
 
         return true;
-    } catch (const mysqlx::Error& err) {
-        cerr << "[DB] create/update error: " << err.what() << endl;
+    }
+    catch (...) {
+        cerr << "DB Create/Update failed\n";
         return false;
     }
+
 }
 
 bool db_read(int key, string& value) {
@@ -149,8 +137,9 @@ bool db_read(int key, string& value) {
         if (!row) return false;
         value = row[0].get<string>();
         return true;
-    } catch (const mysqlx::Error& err) {
-        cerr << "[DB] read error: " << err.what() << endl;
+    } 
+    catch (...) {
+        cerr << "DB read failed\n";
         return false;
     }
 }
@@ -164,20 +153,15 @@ bool db_delete(int key) {
         auto table = schema.getTable("kv_table");
         table.remove().where("k = :key").bind("key", key).execute();
         return true;
-    } catch (const mysqlx::Error& err) {
-        cerr << "[DB] delete error: " << err.what() << endl;
+    }
+    catch (...) {
+        cerr << "DB delete failed\n";
         return false;
     }
 }
 
-// =============================
-// Global Cache
-// =============================
 LRUCache cache(100);
 
-// =============================
-// Crow Web Server
-// =============================
 int main(int argc, char* argv[]) {
     if (argc < 2) {
         cerr << "Usage: " << argv[0] << " <thread_pool_size>\n";
