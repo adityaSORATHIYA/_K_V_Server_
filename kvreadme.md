@@ -174,7 +174,6 @@ Client ----HTTP----> Crow Handler ---> Cache Lookup
 -------------------------------------------------------------------------------------------------------------
 
 ### What happens on delete
-1. Client sends `DELETE /delete/### What happens on delete
 1. Client sends `DELETE /delete/<key>`
 2. App deletes the key from the database
 3. If database delete is successful → remove the key from the cache
