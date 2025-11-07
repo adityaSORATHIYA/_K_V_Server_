@@ -127,14 +127,18 @@ bool db_create_or_update(int key, const string& value) {
 
 bool db_read(int key, string& value) {
     mysqlx::Session* s = thread_session();
-    if (!s) return false;
+    if (!s){
+        return false;
+    }
 
     try {
         auto schema = s->getSchema(DB_SCHEMA);
         auto table = schema.getTable("kv_table");
         auto res = table.select("v").where("k = :key").bind("key", key).execute();
         auto row = res.fetchOne();
-        if (!row) return false;
+        if (!row){
+            return false;
+        }
         value = row[0].get<string>();
         return true;
     } 
@@ -151,6 +155,11 @@ bool db_delete(int key) {
     try {
         auto schema = s->getSchema(DB_SCHEMA);
         auto table = schema.getTable("kv_table");
+        auto res = table.select("v").where("k = :key").bind("key", key).execute();
+        auto row = res.fetchOne();
+        if (!row){
+            return false;
+        }
         table.remove().where("k = :key").bind("key", key).execute();
         return true;
     }
@@ -182,10 +191,12 @@ int main(int argc, char* argv[]) {
                 int key = j["key"].get<int>();
                 string value = j["value"].get<string>();
 
-                bool ok = db_create_or_update(key, value);
-                if (ok) cache.put(key, value);
-
-                return crow::response(ok ? 200 : 500, ok ? "Created" : "Database Error");
+                bool done = db_create_or_update(key, value);
+                if (done) {
+                    cache.put(key, value);
+                    cout << "create successfull" << endl;
+                }
+                return crow::response(done ? 200 : 500, done ? "Created" : "Database Error");
             } catch (...) {
                 return crow::response(400, "Invalid JSON format");
             }
@@ -195,27 +206,41 @@ int main(int argc, char* argv[]) {
     CROW_ROUTE(app, "/read/<int>")
     ([](int key) {
         string value;
-        bool ok = false;
+        bool done = false;
 
-        if (cache.get(key, value))
-            ok = true;
+        if (cache.get(key, value)){
+            done = true;
+            if(done){
+                cout << "cache hit" << endl;
+            }else{
+                cout << "cache miss" << endl;
+            }
+        }
         else if (db_read(key, value)) {
-            ok = true;
+            done = true;
             cache.put(key, value);
         }
-
-        return crow::response(ok ? 200 : 404, ok ? value : "Key not found");
+        if(done) {
+            cout << "read successfull" << endl;
+        } else {
+            cout << "read fail" << endl;
+        }
+        return crow::response(done ? 200 : 404, done ? value : "Key not found");
     });
 
     // DELETE /delete/<int>
     CROW_ROUTE(app, "/delete/<int>").methods(crow::HTTPMethod::DELETE)(
         [](int key) {
-            bool ok = db_delete(key);
-            if (ok) cache.remove(key);
-            return crow::response(ok ? 200 : 500, ok ? "Deleted" : "Database Error");
+            bool done = db_delete(key);
+            if (done) {
+                cache.remove(key);
+                cout << "delete successfull" << endl;
+            }
+            return crow::response(done ? 200 : 500, done ? "Deleted" : "Key not found or database error");
         });
 
     cout << " Server running on port 8080 with " << threads << " threads.\n";
+    app.loglevel(crow::LogLevel::Error);
     app.port(8080).concurrency(threads).run();
 
     return 0;
